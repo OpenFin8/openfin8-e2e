@@ -346,10 +346,10 @@ export async function globalSetup(): Promise<void> {
   // OBVERT-3: the app's store listing is `eopenca` (the renamed
   // eFintech app - its app_slug follows the package).
   assertCliOk(
-    await cliCallSettled('app', 'POST', '/v1/app/setup', { listing_id: listingId('eopenca'), instance_name: 'eOpenCA' }, iopencaEnvId),
+    await cliCallSettled('app', 'POST', '/v1/app/setup', { listing_id: listingId('openfin8-eopenca'), instance_name: 'eOpenCA' }, iopencaEnvId),
     'globalSetup: install eOpenCA',
   );
-  const eopencaHostname = `eopenca.${frank.envSlug}.${iopencaOrgDomain}`;
+  const eopencaHostname = `openfin8-eopenca.${frank.envSlug}.${iopencaOrgDomain}`;
 
   // ── Write meta for test files ───────────────────────────────────────
   const meta = {
