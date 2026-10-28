@@ -1,6 +1,6 @@
 // SPDX-FileCopyrightText: Copyright Logically Magic Inc. <hello@logicallymagic.com>
 // SPDX-FileCopyrightText: Copyright Hamid Jahanzad <Hamid@Jahanzad.com>
-// SPDX-FileCopyrightText: Copyright Contributors to the Bank8:E2E
+// SPDX-FileCopyrightText: Copyright Contributors to the OpenFin8:E2E
 // SPDX-License-Identifier: Apache-2.0
 
 // fixtures/testdata.ts - shared test data (URLs, personas, listing payloads).
@@ -17,7 +17,7 @@
 export const DOMAIN = process.env.SENTIN8_DOMAIN ?? 'local.sentin8.dev';
 
 // ── Tenant org/ev URL helpers ─────────────────────────────────────────
-// The suite operates on two tenant orgs (iBank, iFinTech), each with a
+// The suite operates on two tenant orgs (iBank, iOpenCA), each with a
 // prod env. Every URL a test touches is one of:
 //
 //   app runtime      https://{app-slug}.{env-slug}.{org-domain}
@@ -39,7 +39,7 @@ export const DOMAIN = process.env.SENTIN8_DOMAIN ?? 'local.sentin8.dev';
  *  relay them upstream). */
 export const TENANT_DOMAINS = {
   ibank: `ibank.local.${DOMAIN}`,
-  ifintech: `ifintech.local.${DOMAIN}`,
+  iopenca: `iopenca.local.${DOMAIN}`,
 } as const;
 
 /** Tenant org domain: {org-slug}.{SENTIN8_DOMAIN}. */
@@ -160,10 +160,10 @@ export const Personas: Record<'dan' | 'bill' | 'frank' | 'alice' | 'bob' | 'caro
     lastName: 'Fintech',
     email: emailWithRunID('frank'),
     password: 'Test1234!',
-    domain: `${withRunID('ifintech')}.local.${DOMAIN}`,
+    domain: `${withRunID('iopenca')}.local.${DOMAIN}`,
     role: 'Sentin8 org admin',
-    orgName: withRunID('iFinTech'),
-    orgSlug: withRunID('ifintech'),
+    orgName: withRunID('iOpenCA'),
+    orgSlug: withRunID('iopenca'),
     envName: 'Prod',
     envSlug: 'prod',
   },
@@ -247,9 +247,9 @@ const EBANK_TELLER_DELTA_SCOPES = [
  *  `EBANK_CUSTOMER_SCOPES ∪ EBANK_TELLER_DELTA_SCOPES ∪
  *   EBANK_ADMIN_DELTA_SCOPES`. */
 const EBANK_ADMIN_DELTA_SCOPES = [
-  'bank8:fdx:provider:read',
-  'bank8:fdx:provider:write',
-  'bank8:fdx:admin',
+  'openfin8:ca:provider:read',
+  'openfin8:ca:provider:write',
+  'openfin8:ca:admin',
   'bank8:ledger:accounts:write:any',
   'db:data:write',
   'storage:env:write',
@@ -267,8 +267,8 @@ export const EBankListingPayload: ListingPayload = {
 };
 
 const EFIN_TECH_RECIPIENT_SCOPES = [
-  'bank8:fdx:recipient:read',
-  'bank8:fdx:recipient:write',
+  'openfin8:ca:recipient:read',
+  'openfin8:ca:recipient:write',
   'db:data:read',
   'db:data:write',
   'storage:env:read',
@@ -276,8 +276,8 @@ const EFIN_TECH_RECIPIENT_SCOPES = [
 ];
 
 export const EFinTechListingPayload: ListingPayload = {
-  appName: 'eFintech',
-  appSlug: 'efintech',
+  appName: 'eOpenCA',
+  appSlug: 'eopenca',
   description:
     'FDX Data Recipient app - connect your external bank accounts, view balances, transactions, and manage consent.',
   // backendUrl: 'http://localhost:3006',

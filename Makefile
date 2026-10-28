@@ -1,9 +1,9 @@
 # SPDX-FileCopyrightText: Copyright Logically Magic Inc. <hello@logicallymagic.com>
 # SPDX-FileCopyrightText: Copyright Hamid Jahanzad <Hamid@Jahanzad.com>
-# SPDX-FileCopyrightText: Copyright Contributors to the Bank8:E2E
+# SPDX-FileCopyrightText: Copyright Contributors to the OpenFin8:E2E
 # SPDX-License-Identifier: Apache-2.0
 
-# Makefile — bank8-e2e (e2e repo, RS §4.5)
+# Makefile — openfin8-e2e (e2e repo, RS §4.5)
 #
 # Self-contained dev controls for THIS e2e suite. The suite drives the
 # four bank8 apps through a real browser (UI lifecycle) plus the
@@ -29,7 +29,7 @@ endif
 .PHONY: help install lint test test-lifecycle test-protocol report clean
 
 help: ## Show this help
-	@echo "bank8-e2e (Playwright e2e)"
+	@echo "openfin8-e2e (Playwright e2e)"
 	@grep -E '^[a-z-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}'
 
 install: ## pnpm install (frozen lockfile) + Chromium download

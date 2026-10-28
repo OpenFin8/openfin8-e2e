@@ -1,6 +1,6 @@
 // SPDX-FileCopyrightText: Copyright Logically Magic Inc. <hello@logicallymagic.com>
 // SPDX-FileCopyrightText: Copyright Hamid Jahanzad <Hamid@Jahanzad.com>
-// SPDX-FileCopyrightText: Copyright Contributors to the Bank8:E2E
+// SPDX-FileCopyrightText: Copyright Contributors to the OpenFin8:E2E
 // SPDX-License-Identifier: Apache-2.0
 
 // ── bank8 e2e - Playwright TypeScript configuration ──────────────────────
@@ -8,7 +8,7 @@
 // Platform setup happens ONCE in tests/global-setup.ts via the sentin8-cli
 // binary (org/env/features/app instances/staff users) - no Dash-driven
 // platform setup. UI tests drive ONLY the four bank8 apps (admin, ebank,
-// efintech, eteller). Dash coverage lives in the sentin8 e2e suite.
+// eopenca, eteller). Dash coverage lives in the sentin8 e2e suite.
 //
 // Suites:
 //   bank8_lifecycle - serial UI lifecycle across the 4 bank8 apps

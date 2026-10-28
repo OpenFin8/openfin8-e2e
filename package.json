@@ -1,14 +1,14 @@
 {
-  "name": "bank8-e2e",
+  "name": "openfin8-e2e",
   "version": "0.1.0",
   "private": true,
-  "description": "Bank8 vertical end-to-end test suites (TypeScript + official Playwright).",
+  "description": "OpenFin8 vertical end-to-end test suites (TypeScript + official Playwright) - the recipient journey.",
   "type": "module",
   "engines": {
     "node": ">=20"
   },
   "scripts": {
-    "test": "playwright test --max-failures=1 tests/bank8_lifecycle.spec.ts",
+    "test": "playwright test --max-failures=1 tests/openfin8_recipient_journey.spec.ts",
     "test:protocol": "playwright test tests/protocol/",
     "test:lifecycle": "playwright test tests/bank8_lifecycle.spec.ts",
     "test:suite4": "playwright test tests/protocol/suite4_tenant_auth_flows.spec.ts",

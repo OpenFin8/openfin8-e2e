@@ -1,6 +1,6 @@
 // SPDX-FileCopyrightText: Copyright Logically Magic Inc. <hello@logicallymagic.com>
 // SPDX-FileCopyrightText: Copyright Hamid Jahanzad <Hamid@Jahanzad.com>
-// SPDX-FileCopyrightText: Copyright Contributors to the Bank8:E2E
+// SPDX-FileCopyrightText: Copyright Contributors to the OpenFin8:E2E
 // SPDX-License-Identifier: Apache-2.0
 
 // tests/global-setup.ts - runs ONCE before all test files.
@@ -13,11 +13,11 @@
 //   3. Vertical services (ledger, payments, fdx) enabled on prod env.
 //   4. App instances (eBank, eTeller, Admin) installed from store listings.
 //   5. Staff users (Ben org-admin, Bob teller) + group membership.
-//   6. iFinTech org + prod env + eFintech instance (for the FDX flow).
+//   6. iOpenCA org + prod env + eOpenCA instance (for the FDX flow).
 //
 // The resulting org/env/hostname data is written to .tmp/test-meta.json
 // and read by the lifecycle spec. UI tests then drive ONLY the four bank8
-// apps (admin, ebank, efintech, eteller).
+// apps (admin, ebank, eopenca, eteller).
 
 import { Personas, RUN_ID, DOMAIN } from '../fixtures/testdata.js';
 import { runCli, cliCall, cliDo, cliDoSettled, cliSignIn, cliRefreshToken, cliCallSettled, assertCliOk } from '../fixtures/cli.js';
@@ -133,11 +133,11 @@ export async function globalSetup(): Promise<void> {
   let providerRegistered = false;
   for (let i = 0; i < 45 && !providerRegistered; i++) {
     try {
-      // NOTE: the service name must be the DASH form (`bank8-fdx`) - the
+      // NOTE: the service name must be the DASH form (`openfin8-ca`) - the
       // CLI's `call` resolver derives `{name}.ops.sys.{domain}` and only
       // the dash form matches the enrolled subdomain (the bare leaf `fdx`
       // 404s on Web's app-fallback; platform CLI defect, sentin8 backlog).
-      const resp = await cliCall('bank8-fdx', 'GET', '/v1/recipient/providers');
+      const resp = await cliCall('openfin8-ca', 'GET', '/v1/recipient/providers');
       const body = JSON.stringify(resp.json ?? {});
       if (body.includes(`iBank${RUN_ID}`)) providerRegistered = true;
     } catch { /* fdx may still be booting - retry */ }
@@ -200,7 +200,9 @@ export async function globalSetup(): Promise<void> {
 
   const staffAuthUrl = `https://auth.staff.${ibankOrgDomain}`;
   const ebankHostname = await installApp('bank8-ebank', ibankEnvId, 'eBank');
-  const etellerHostname = await installApp('bank8-eteller', ibankEnvId, 'eTeller', staffAuthUrl);
+  // OBVERT-3: openfin8-e2e drives the RECIPIENT journey. eBank + Admin
+  // stay (Alice's accounts and the products prerequisite on the provider
+  // side); eTeller is a bank8-app flow - it lives in bank8-e2e.
   const adminAppHostname = await installApp('bank8-admin', ibankEnvId, 'Bank8 Admin', staffAuthUrl);
 
   // ── 5. Staff users (Ben org-admin, Bob teller) ──────────────────────
@@ -255,51 +257,42 @@ export async function globalSetup(): Promise<void> {
   // listing's scopes - the live `principal.scopes` the vertical
   // scope-mirror policies evaluate against. The legacy snake_case groups
   // (`sentin8:app:bank8_admin`) grant nothing (AUTH-3 retired them).
-  const adminInstanceGroup = instanceIds.get('bank8-admin');
-  const tellerInstanceGroup = instanceIds.get('bank8-eteller');
-  if (adminInstanceGroup) {
-    await ensureGroupMember(`sentin8:app:${adminInstanceGroup}`, (benUser.json as { id: string }).id, 'Ben → sentin8:app:{admin instance}');
-  } else {
-    await ensureGroupMember('sentin8:app:bank8_admin', (benUser.json as { id: string }).id, 'Ben → sentin8:app:bank8_admin (legacy fallback)');
-  }
-  if (tellerInstanceGroup) {
-    await ensureGroupMember(`sentin8:app:${tellerInstanceGroup}`, (bobUser.json as { id: string }).id, 'Bob → sentin8:app:{teller instance}');
-  } else {
-    await ensureGroupMember('sentin8:app:e_teller', (bobUser.json as { id: string }).id, 'Bob → sentin8:app:e_teller (legacy fallback)');
-  }
+  // OBVERT-3: the Admin/Teller instance groups are bank8-e2e flows -
+  // not installed here. Ben keeps sentin8:env:admins (platform-seeded),
+  // which is enough for the provider-side CLI reads this suite needs.
 
-  // ── 6. iFinTech org + prod env + eFintech instance ──────────────────
+  // ── 6. iOpenCA org + prod env + eOpenCA instance ──────────────────
   await runCli([
     'signup', '--email', frank.email!, '--password', frank.password!,
     '--first-name', frank.firstName, '--last-name', frank.lastName,
   ]).catch(() => undefined);
 
-  const fintechOrg = await cliDo('sys', 'org', 'create', {
+  const opencaOrg = await cliDo('sys', 'org', 'create', {
     display_name: frank.orgName!,
     name: frank.orgSlug!,
     slug: frank.orgSlug!,
     domain: frank.domain!,
   });
-  assertCliOk(fintechOrg, 'globalSetup: create iFinTech org');
-  const ifintechOrgId = (fintechOrg.json as { id: string }).id;
-  const ifintechOrgDomain =
-    (fintechOrg.json as { custom_domain?: string }).custom_domain ?? frank.domain!;
+  assertCliOk(opencaOrg, 'globalSetup: create iOpenCA org');
+  const iopencaOrgId = (opencaOrg.json as { id: string }).id;
+  const iopencaOrgDomain =
+    (opencaOrg.json as { custom_domain?: string }).custom_domain ?? frank.domain!;
 
-  // Same provisioning barrier as the iBank org above - the eFintech
+  // Same provisioning barrier as the iBank org above - the eOpenCA
   // install below targets this org's env and would 403 inside the
   // pre-grant window.
-  const fintechOrgVerify = await cliCallSettled('sys', 'GET', `/v1/org/${ifintechOrgId}`);
-  assertCliOk(fintechOrgVerify, 'globalSetup: CLI verify iFinTech org (provisioning barrier)');
+  const opencaOrgVerify = await cliCallSettled('sys', 'GET', `/v1/org/${iopencaOrgId}`);
+  assertCliOk(opencaOrgVerify, 'globalSetup: CLI verify iOpenCA org (provisioning barrier)');
 
-  const fintechEnv = await cliDoSettled('sys', 'env', 'create', {
-    org_id: ifintechOrgId,
+  const opencaEnv = await cliDoSettled('sys', 'env', 'create', {
+    org_id: iopencaOrgId,
     display_name: frank.envName!,
     name: frank.envSlug!,
     slug: frank.envSlug!,
     env_type: 'production',
   });
-  assertCliOk(fintechEnv, 'globalSetup: create iFinTech prod env');
-  const ifintechEnvId = (fintechEnv.json as { id: string }).id;
+  assertCliOk(opencaEnv, 'globalSetup: create iOpenCA prod env');
+  const iopencaEnvId = (opencaEnv.json as { id: string }).id;
 
   // AUTH-REACHABILITY BARRIER. App's setup_instance DCRs the new
   // instance's sign-in client against the env-scoped customer Auth
@@ -310,13 +303,13 @@ export async function globalSetup(): Promise<void> {
   // client_id, falls back to the platform `dash` client which is not
   // active in this env → PAR 401 "invalid client").
   // eBank never hit this because ~49 s elapse (FDX provider poll) before
-  // its install; eFintech is installed ~1 ms after the env is created so
+  // its install; eOpenCA is installed ~1 ms after the env is created so
   // it raced the env-auth provisioning every run. Poll the env auth
   // until it answers (any HTTP verdict counts - TLS/404/405 mean the
   // route is live; only connect/TLS-refusal means "not yet"), then
   // install. Bounded observation (max 45 s) like the FDX provider poll
   // - a stall fails loudly instead of hiding behind the swallow.
-  const ifintechAuthUrl = `https://auth.${frank.envSlug}.${ifintechOrgDomain}`;
+  const iopencaAuthUrl = `https://auth.${frank.envSlug}.${iopencaOrgDomain}`;
   {
     const prevTls = process.env.NODE_TLS_REJECT_UNAUTHORIZED;
     process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
@@ -327,7 +320,7 @@ export async function globalSetup(): Promise<void> {
         const probe = new AbortController();
         const timer = setTimeout(() => probe.abort(), 3_000);
         try {
-          await fetch(ifintechAuthUrl, { method: 'GET', redirect: 'manual', signal: probe.signal });
+          await fetch(iopencaAuthUrl, { method: 'GET', redirect: 'manual', signal: probe.signal });
           authReachable = true;
         } catch {
           // Not routable yet (ENOTFOUND / ECONNREFUSED / TLS refused / abort) -
@@ -344,17 +337,19 @@ export async function globalSetup(): Promise<void> {
       else process.env.NODE_TLS_REJECT_UNAUTHORIZED = prevTls;
     }
     if (authReachable) {
-      console.log(`  ✅ globalSetup: iFinTech env auth reachable (${ifintechAuthUrl})`);
+      console.log(`  ✅ globalSetup: iOpenCA env auth reachable (${iopencaAuthUrl})`);
     } else {
-      console.log(`  ⚠️ globalSetup: iFinTech env auth NOT observed - eFintech DCR may fail`);
+      console.log(`  ⚠️ globalSetup: iOpenCA env auth NOT observed - eOpenCA DCR may fail`);
     }
   }
 
+  // OBVERT-3: the app's store listing is `eopenca` (the renamed
+  // eFintech app - its app_slug follows the package).
   assertCliOk(
-    await cliCallSettled('app', 'POST', '/v1/app/setup', { listing_id: listingId('bank8-efintech'), instance_name: 'eFintech' }, ifintechEnvId),
-    'globalSetup: install eFintech',
+    await cliCallSettled('app', 'POST', '/v1/app/setup', { listing_id: listingId('eopenca'), instance_name: 'eOpenCA' }, iopencaEnvId),
+    'globalSetup: install eOpenCA',
   );
-  const efintechHostname = `bank8-efintech.${frank.envSlug}.${ifintechOrgDomain}`;
+  const eopencaHostname = `eopenca.${frank.envSlug}.${iopencaOrgDomain}`;
 
   // ── Write meta for test files ───────────────────────────────────────
   const meta = {
@@ -366,13 +361,12 @@ export async function globalSetup(): Promise<void> {
     ibankOrgDomain,
     ebankHostname,
     adminAppHostname,
-    etellerHostname,
-    efintechHostname,
-    ifintechOrgId,
-    ifintechEnvId,
+    eopencaHostname,
+    iopencaOrgId,
+    iopencaEnvId,
     benEmail: ben.email,
-    bobEmail: bob.email,
     aliceEmail: Personas.alice.email,
+    frankEmail: frank.email,
   };
   mkdirSync(dirname(META_PATH), { recursive: true });
   writeFileSync(META_PATH, JSON.stringify(meta, null, 2));

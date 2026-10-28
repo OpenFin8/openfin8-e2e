@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # SPDX-FileCopyrightText: Copyright Logically Magic Inc. <hello@logicallymagic.com>
 # SPDX-FileCopyrightText: Copyright Hamid Jahanzad <Hamid@Jahanzad.com>
-# SPDX-FileCopyrightText: Copyright Contributors to the Bank8:E2E
+# SPDX-FileCopyrightText: Copyright Contributors to the OpenFin8:E2E
 # SPDX-License-Identifier: Apache-2.0
 # ── bank8 e2e test runner with CA trust auto-configured ──────────────
 #

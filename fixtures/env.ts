@@ -5,7 +5,7 @@
 // fixtures/env.ts - tree-root `.env` loader (the fleet's own configuration).
 //
 // Mirrors sentin8-e2e's fixtures/env.ts - same contract, one directory
-// deeper (fixtures/ → bank8-e2e/ → bank8/ group → tree root). The suite
+// deeper (fixtures/ → openfin8-e2e/ → bank8/ group → tree root). The suite
 // tests the deployment the operator actually booted, so its target
 // configuration is read from the SAME `.env` the fleet is booted from.
 // NO fallback literal: when nothing defines `SENTIN8_DOMAIN` the run
@@ -26,7 +26,7 @@ const DOTENV_VARS = ['SENTIN8_DOMAIN', 'SENTIN8_REPO_ROOT', 'SENTIN8_CLI_BIN'] a
 function repoRoot(): string {
   // Explicit operator override wins.
   if (process.env.SENTIN8_REPO_ROOT) return resolve(process.env.SENTIN8_REPO_ROOT);
-  // fixtures/env.ts → fixtures/ → bank8-e2e/ → bank8/ (group) → tree root.
+  // fixtures/env.ts → fixtures/ → openfin8-e2e/ → bank8/ (group) → tree root.
   return resolve(import.meta.dirname ?? '.', '..', '..', '..');
 }
 

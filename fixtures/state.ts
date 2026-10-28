@@ -1,6 +1,6 @@
 // SPDX-FileCopyrightText: Copyright Logically Magic Inc. <hello@logicallymagic.com>
 // SPDX-FileCopyrightText: Copyright Hamid Jahanzad <Hamid@Jahanzad.com>
-// SPDX-FileCopyrightText: Copyright Contributors to the Bank8:E2E
+// SPDX-FileCopyrightText: Copyright Contributors to the OpenFin8:E2E
 // SPDX-License-Identifier: Apache-2.0
 
 // fixtures/state.ts - cross-suite state shared via .e2e-state.json.
@@ -28,7 +28,7 @@ const STATE_CANDIDATES = [
 export interface E2EState {
   // Suite 1 - App Store / catalog
   ebankListingId?: string;
-  efintechListingId?: string;
+  eopencaListingId?: string;
 
   // Suite 2 - iBank end-to-end
   ibankOrgId?: string;
@@ -45,20 +45,20 @@ export interface E2EState {
   ebankAccountIds?: string[];
 
   // Suite 3 - iFintech end-to-end
-  ifintechOrgId?: string;
-  ifintechEnvId?: string;
-  ifintechOrgSlug?: string;
-  ifintechEnvSlug?: string;
-  efintechInstanceId?: string;
-  efintechHostname?: string;
-  efintechSetupIdempotencyKey?: string;
+  iopencaOrgId?: string;
+  iopencaEnvId?: string;
+  iopencaOrgSlug?: string;
+  iopencaEnvSlug?: string;
+  eopencaInstanceId?: string;
+  eopencaHostname?: string;
+  eopencaSetupIdempotencyKey?: string;
   frankEmail?: string;
-  ifintechAliceEmail?: string;
+  iopencaAliceEmail?: string;
   aliceConsentId?: string;
 
   // BFF8 proxy state (cross-suite)
   ebankBff8SessionCookie?: string;
-  efintechBff8SessionCookie?: string;
+  eopencaBff8SessionCookie?: string;
 }
 
 let resolvedPath: string | undefined;
@@ -131,12 +131,12 @@ export function ebankAppURLFromState(s: E2EState): string {
 export function ebankBff8URLFromState(s: E2EState): string {
   return tenantBff8URL(s.ibankOrgSlug ?? 'ibank', s.ibankEnvSlug ?? 'prod', 'www');
 }
-export function efintechAppURLFromState(s: E2EState): string {
-  if (s.efintechHostname) return `https://${s.efintechHostname}`;
-  return tenantAppURL(s.ifintechOrgSlug ?? 'ifintech', s.ifintechEnvSlug ?? 'prod', 'www');
+export function eopencaAppURLFromState(s: E2EState): string {
+  if (s.eopencaHostname) return `https://${s.eopencaHostname}`;
+  return tenantAppURL(s.iopencaOrgSlug ?? 'iopenca', s.iopencaEnvSlug ?? 'prod', 'www');
 }
-export function efintechBff8URLFromState(s: E2EState): string {
-  return tenantBff8URL(s.ifintechOrgSlug ?? 'ifintech', s.ifintechEnvSlug ?? 'prod', 'www');
+export function eopencaBff8URLFromState(s: E2EState): string {
+  return tenantBff8URL(s.iopencaOrgSlug ?? 'iopenca', s.iopencaEnvSlug ?? 'prod', 'www');
 }
 
 // Re-export the join so callers can compute repo-relative paths.
