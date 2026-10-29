@@ -115,7 +115,7 @@ export async function globalSetup(): Promise<void> {
   // reporting/risk/compliance are the regulatory suite - enabling them
   // seeds jurisdiction obligations + policy templates through each
   // service's env-init consumer (bank8:reporting:envinit etc.).
-  for (const svc of ['ledger', 'payments', 'fdx', 'reporting', 'risk', 'compliance']) {
+  for (const svc of ['ledger', 'payments', 'fdx', 'reporting', 'risk', 'compliance', 'openfin8-eu']) {
     assertCliOk(
       await cliCall('sys', 'PUT', `/v1/env/${ibankEnvId}/services`, { service: svc, enabled: true, config: {} }),
       `globalSetup: enable ${svc} on iBank prod env`,
@@ -149,6 +149,29 @@ export async function globalSetup(): Promise<void> {
     console.log(`  ✅ globalSetup: FDX provider profile registered (${orgProviderName})`);
   } else {
     console.log(`  ⚠️ globalSetup: FDX provider profile NOT observed - test 6 may fail`);
+  }
+
+  // EU-8: wait for the XS2A adapter to serve its discovery surface (the
+  // enabled service boots + registers its schema via env-init; the poll
+  // is a bounded OBSERVATION - a stall warns, the EU spec fails loudly
+  // on a genuinely-unserved adapter).
+  let euServing = false;
+  for (let i = 0; i < 45 && !euServing; i++) {
+    try {
+      // NOTE: the dash form (`openfin8-eu`) - the CLI's `call` resolver
+      // derives `{name}.ops.sys.{domain}` and only the dash form matches
+      // the enrolled subdomain.
+      const resp = await cliCall('openfin8-eu', 'GET', '/v1/discovery');
+      if ((resp.json as { ofVersion?: string })?.ofVersion) euServing = true;
+    } catch { /* the adapter may still be booting - retry */ }
+    if (!euServing) {
+      await new Promise((r) => setTimeout(r, 1_000));
+    }
+  }
+  if (euServing) {
+    console.log('  ✅ globalSetup: openfin8-eu serving its discovery surface');
+  } else {
+    console.log('  ⚠️ globalSetup: openfin8-eu NOT observed serving - the EU journey spec may fail');
   }
 
   // ── 4. Install app instances from store listings ────────────────────
