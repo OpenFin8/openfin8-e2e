@@ -115,7 +115,7 @@ export async function globalSetup(): Promise<void> {
   // reporting/risk/compliance are the regulatory suite - enabling them
   // seeds jurisdiction obligations + policy templates through each
   // service's env-init consumer (bank8:reporting:envinit etc.).
-  for (const svc of ['ledger', 'payments', 'fdx', 'reporting', 'risk', 'compliance', 'openfin8-eu']) {
+  for (const svc of ['ledger', 'payments', 'fdx', 'reporting', 'risk', 'compliance', 'openfin8-eu', 'openfin8-uk']) {
     assertCliOk(
       await cliCall('sys', 'PUT', `/v1/env/${ibankEnvId}/services`, { service: svc, enabled: true, config: {} }),
       `globalSetup: enable ${svc} on iBank prod env`,
@@ -172,6 +172,29 @@ export async function globalSetup(): Promise<void> {
     console.log('  ✅ globalSetup: openfin8-eu serving its discovery surface');
   } else {
     console.log('  ⚠️ globalSetup: openfin8-eu NOT observed serving - the EU journey spec may fail');
+  }
+
+  // OBARCH-5 (backlog UK-8): wait for the UK adapter to serve its OB
+  // consent surface (the bounded observation, the VDC-9 rule).
+  let ukServing = false;
+  for (let i = 0; i < 45 && !ukServing; i++) {
+    try {
+      // NOTE: the dash form (`openfin8-uk`) - the CLI's `call` resolver
+      // derives `{name}.ops.sys.{domain}`; only the dash form matches
+      // the enrolled subdomain.
+      // The OB prefix carries the served version: the consent staging
+      // route (a 400-on-auth-miss still proves the surface serves).
+      await cliCall('openfin8-uk', 'GET', '/open-banking/v3.1/aisp/account-access-consents/00000000-0000-0000-0000-000000000000');
+      ukServing = true; // any response (even a 400) proves the route serves
+    } catch { /* the adapter may still be booting - retry */ }
+    if (!ukServing) {
+      await new Promise((r) => setTimeout(r, 1_000));
+    }
+  }
+  if (ukServing) {
+    console.log('  ✅ globalSetup: openfin8-uk serving its OB surface');
+  } else {
+    console.log('  ⚠️ globalSetup: openfin8-uk NOT observed serving - the UK journey spec may fail');
   }
 
   // ── 4. Install app instances from store listings ────────────────────
