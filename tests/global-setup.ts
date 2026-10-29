@@ -136,7 +136,7 @@ export async function globalSetup(): Promise<void> {
       // NOTE: the service name must be the DASH form (`openfin8-ca`) - the
       // CLI's `call` resolver derives `{name}.ops.sys.{domain}` and only
       // the dash form matches the enrolled subdomain (the bare leaf `fdx`
-      // 404s on Web's app-fallback; platform CLI defect, sentin8 backlog).
+      // 404s on Web's app-fallback).
       const resp = await cliCall('openfin8-ca', 'GET', '/v1/recipient/providers');
       const body = JSON.stringify(resp.json ?? {});
       if (body.includes(`iBank${RUN_ID}`)) providerRegistered = true;
@@ -151,7 +151,7 @@ export async function globalSetup(): Promise<void> {
     console.log(`  ⚠️ globalSetup: FDX provider profile NOT observed - test 6 may fail`);
   }
 
-  // EU-8: wait for the XS2A adapter to serve its discovery surface (the
+  // Wait for the XS2A adapter to serve its discovery surface (the
   // enabled service boots + registers its schema via env-init; the poll
   // is a bounded OBSERVATION - a stall warns, the EU spec fails loudly
   // on a genuinely-unserved adapter).
@@ -174,8 +174,8 @@ export async function globalSetup(): Promise<void> {
     console.log('  ⚠️ globalSetup: openfin8-eu NOT observed serving - the EU journey spec may fail');
   }
 
-  // OBARCH-5 (backlog UK-8): wait for the UK adapter to serve its OB
-  // consent surface (the bounded observation, the VDC-9 rule).
+  // Wait for the UK adapter to serve its OB consent surface (the
+  // bounded observation, the VDC-9 rule).
   let ukServing = false;
   for (let i = 0; i < 45 && !ukServing; i++) {
     try {

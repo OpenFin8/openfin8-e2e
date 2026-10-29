@@ -11,8 +11,8 @@
 // much faster than browser-driven Dash flows and leaves Dash testing to the
 // sentin8 e2e suite.
 //
-// Adapted from sentin8/e2e-ts/fixtures/cli.ts (shared pattern; bank8 keeps
-// its own copy because the suites are separate packages - see BACKLOG).
+// Adapted from sentin8/e2e-ts/fixtures/cli.ts (shared pattern; this
+// suite keeps its own copy because the suites are separate packages).
 
 import { spawn, type ChildProcess } from 'node:child_process';
 import { writeFile, readFile, mkdir } from 'node:fs/promises';

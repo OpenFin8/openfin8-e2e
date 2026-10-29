@@ -5,9 +5,8 @@
 
 // tests/openfin8_uk_ob_journey.spec.ts
 //
-// OBARCH-5 (backlog UK-8): the UK OB journey over the enabled
-// `openfin8-uk` adapter - the AISP intent flow + the PISP
-// domestic-payment flow (BUSINESS §9 bullet 5). This iteration drives
+// The UK OB journey: the AISP intent flow + the PISP
+// domestic-payment flow (openfin8-uk/BUSINESS.md §9). This iteration drives
 // the adapter's contract surfaces deterministically via the CLI (the
 // EU journey precedent; the FAPI browser PSU-page half is the
 // recipient-app story):
@@ -56,7 +55,7 @@ test.beforeAll(() => {
 const UK = 'openfin8-uk';
 const PFX = '/open-banking/v3.1';
 
-test('UK-8.1 the AIS intent stages AwaitingAuthorisation', async () => {
+test('the AIS intent stages AwaitingAuthorisation', async () => {
   const resp = await cliCall(UK, 'POST', `${PFX}/aisp/account-access-consents`, {
     Data: {
       Permissions: ['ReadAccountsBasic', 'ReadBalances'],
@@ -70,7 +69,7 @@ test('UK-8.1 the AIS intent stages AwaitingAuthorisation', async () => {
   expect(consent.Status).toBe('AwaitingAuthorisation');
 });
 
-test('UK-8.2 the authorization observation reaches Authorised', async () => {
+test('the authorization observation reaches Authorised', async () => {
   // Stage the intent, then drive the observation (the PSU journey's
   // completion - the adapter's internal observation seam).
   const stage = await cliCall(UK, 'POST', `${PFX}/aisp/account-access-consents`, {
@@ -86,7 +85,7 @@ test('UK-8.2 the authorization observation reaches Authorised', async () => {
   expect((read.json as { Data: { Status: string } }).Data.Status).toBe('AwaitingAuthorisation');
 });
 
-test('UK-8.3 the OBL envelope wraps every response', async () => {
+test('the OBL envelope wraps every response', async () => {
   const stage = await cliCall(UK, 'POST', `${PFX}/aisp/account-access-consents`, {
     Data: { Permissions: ['ReadAccountsBasic'] },
     Risk: {},
@@ -103,7 +102,7 @@ test('UK-8.3 the OBL envelope wraps every response', async () => {
   expect(body.Meta).toBeTruthy();
 });
 
-test('UK-8.4 the revoked consent answers 400 (never a bare 404)', async () => {
+test('the revoked consent answers 400 (never a bare 404)', async () => {
   const stage = await cliCall(UK, 'POST', `${PFX}/aisp/account-access-consents`, {
     Data: { Permissions: ['ReadAccountsBasic'] },
     Risk: {},
@@ -124,7 +123,7 @@ test('UK-8.4 the revoked consent answers 400 (never a bare 404)', async () => {
   ).toBe(true);
 });
 
-test('UK-8.5 the JWS discipline + the idempotency key on domestic payments', async () => {
+test('the JWS discipline + the idempotency key on domestic payments', async () => {
   // The JWS fixture over the canonical body (the ceremony module's
   // deterministic form: sig:<sha256 of "{iss}:{iat}:{body}>).
   const iss = 'org-x/software-y';
@@ -162,7 +161,7 @@ test('UK-8.5 the JWS discipline + the idempotency key on domestic payments', asy
   // verify_fixture_signature contract) - asserted via the pass above.
 });
 
-test('UK-8.6 the unserved surfaces answer the honest 404/501', async () => {
+test('the unserved surfaces answer the honest 404/501', async () => {
   // File payments: the decided follow-on (defined-but-unimplemented).
   const file = await cliCall(UK, 'POST', `${PFX}/pisp/file-payment-consents`, {
     Data: {},

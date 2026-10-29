@@ -5,9 +5,8 @@
 
 // tests/openfin8_eu_xs2a_journey.spec.ts
 //
-// OBARCH-7 (backlog EU-8): the EU XS2A journey over the enabled
-// `openfin8-eu` adapter - the redirect-SCA AIS + PIS flows (BUSINESS §9
-// bullet 5). Platform setup happens in global-setup.ts (the org/env +
+// The EU XS2A journey: the redirect-SCA AIS + PIS flows
+// (openfin8-eu/BUSINESS.md §9). Platform setup happens in global-setup.ts (the org/env +
 // the service enablement); this spec drives the adapter's OWN surface
 // through the CLI (the consent + authorisation model + the ceremonies +
 // the discovery + the honest unsupported answers):
@@ -60,7 +59,7 @@ test.beforeAll(() => {
 // the enrolled subdomain - the CA precedent).
 const EU = 'openfin8-eu';
 
-test('EU-8.1 discovery advertises the honest served surface', async () => {
+test('discovery advertises the honest served surface', async () => {
   const resp = await cliCall(EU, 'GET', '/v1/discovery');
   assertCliOk(resp, 'discovery');
   const body = resp.json as {
@@ -76,7 +75,7 @@ test('EU-8.1 discovery advertises the honest served surface', async () => {
   expect(body.paymentProducts).toContain('sepa-credit-transfers');
 });
 
-test('EU-8.2 the AIS consent + redirect-SCA ceremony reaches VALID', async () => {
+test('the AIS consent + redirect-SCA ceremony reaches VALID', async () => {
   // 1. Create the AIS consent - the four-state machine starts at `received`.
   const create = await cliCall(EU, 'POST', '/v1/consents', {
     customer_id: meta.ibankEnvId, // the PSU handle rides the caller's context
@@ -134,7 +133,7 @@ test('EU-8.2 the AIS consent + redirect-SCA ceremony reaches VALID', async () =>
   expect((status.json as { status: string }).status).toBe('valid');
 });
 
-test('EU-8.3 a failed SCA challenge never touches the consent state', async () => {
+test('a failed SCA challenge never touches the consent state', async () => {
   // A consent + a redirect ceremony whose challenge FAILS: the
   // authorisation goes `failed` (terminal for the sub-resource) but the
   // consent stays `received` (a failed challenge is retryable with a NEW
@@ -174,7 +173,7 @@ test('EU-8.3 a failed SCA challenge never touches the consent state', async () =
   expect((callback.json as { status: string }).status).toBe('received');
 });
 
-test('EU-8.4 PIS fails closed without a QSEALC signature', async () => {
+test('PIS fails closed without a QSEALC signature', async () => {
   // An unsigned initiation is rejected (EU invariant 1: every payment
   // initiation verifies the QSEALC signature; Missing/Invalid/
   // NotConfigured all REJECT - the surface never degrades). A CLI
@@ -223,7 +222,7 @@ test('EU-8.4 PIS fails closed without a QSEALC signature', async () => {
   ).toBe(true);
 });
 
-test('EU-8.5 the extended surfaces answer honestly (501, never stubs)', async () => {
+test('the extended surfaces answer honestly (501, never stubs)', async () => {
   // The out-of-scope data families return the standard's unsupported
   // response - never stubbed data (the kernel invariant).
   for (const path of ['/v1/mandates', '/v1/request-to-pay', '/v1/push-ais']) {
