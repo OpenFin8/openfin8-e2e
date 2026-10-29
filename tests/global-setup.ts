@@ -107,7 +107,7 @@ export async function globalSetup(): Promise<void> {
   await cliRefreshToken();
 
   // ── 3. Enable vertical services on the prod env ────────────────────
-  // VDC-9 (design/sentin8-vertical-data-plane-contract.md §VDC.8): ONE
+  // (design/sentin8-vertical-data-plane-contract.md §VDC.8): ONE
   // enable event per service - the env-init path is verified working, so
   // the former brute-force re-PUT loops (30× re-firing the enable event to
   // mask a silently-broken consumer) are removed. A seed that genuinely
@@ -127,7 +127,7 @@ export async function globalSetup(): Promise<void> {
   // name appears. Test 6 (FDX consent) hard-fails without it, and the SSE
   // consumer can lag the service-enabled event by seconds. Polling keeps
   // the async registration out of the test's path; the poll is a bounded
-  // OBSERVATION only (VDC-9) - a stall fails loudly instead of re-firing
+  // OBSERVATION only - a stall fails loudly instead of re-firing
   // the event.
   const orgProviderName = `iBank${RUN_ID}`;
   let providerRegistered = false;
@@ -175,7 +175,7 @@ export async function globalSetup(): Promise<void> {
   }
 
   // Wait for the UK adapter to serve its OB consent surface (the
-  // bounded observation, the VDC-9 rule).
+  // bounded observation, the rule).
   let ukServing = false;
   for (let i = 0; i < 45 && !ukServing; i++) {
     try {

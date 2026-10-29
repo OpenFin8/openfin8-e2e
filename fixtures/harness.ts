@@ -421,7 +421,7 @@ import { logStep } from './log.js';
  * Flutter labels use em dashes while the specs type plain '-'; without
  * this normalization the matchers below never find the element
  * (observed 2026-10-20, lifecycle step 4: label
- * 'Assisted Login — Send link to customer' never matched needle
+ * 'Assisted Login  - Send link to customer' never matched needle
  * 'Assisted Login - Send link to customer').
  */
 const DASH_RE = /[\u2014\u2013\u2212]/g;
@@ -444,7 +444,7 @@ export async function clickFlutterButton(page: Page, text: string, exact: boolea
   while (Date.now() < deadline) {
     const rect = await page.evaluate(({ needle, exact }: { needle: string; exact: boolean }) => {
       // Normalize typographic dashes on both needle and label so an
-      // ASCII-needle ('Foo - Bar') matches an em-dash label ('Foo — Bar').
+      // ASCII-needle ('Foo - Bar') matches an em-dash label ('Foo  - Bar').
       const dash = (s: string): string => s.replace(/[\u2014\u2013\u2212]/g, '-');
       const n = dash(needle).toLowerCase();
       const els = document.querySelectorAll('flt-semantics');
