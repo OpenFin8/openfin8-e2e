@@ -76,35 +76,31 @@ interface TestMeta {
  * first use in the tests re-triggers the mint anyway.
  */
 async function warmTenantServiceRoutes(meta: TestMeta, orgDomain: string): Promise<void> {
-  const prev = process.env.NODE_TLS_REJECT_UNAUTHORIZED;
-  process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
-  try {
-    const deadline = Date.now() + 15_000;
-    let warmed = false;
-    // One representative route per service family - ledger's admin-ui route
-    // is the first one the admin UI drives; warming it warms the shared
-    // on-demand cert path for the rest (same org/env suffix mints fine).
-    const routes = [
-      `https://bank8-ledger.prod.${orgDomain}/v1/health`,
-    ];
-    while (Date.now() < deadline && !warmed) {
-      for (const url of routes) {
-        try {
-          const resp = await fetch(url, { signal: AbortSignal.timeout(3_000) });
-          // ANY HTTP verdict means TLS is live - the mint completed.
-          if (resp.status > 0) { warmed = true; break; }
-        } catch {
-          // Not minted yet - retry below.
-        }
+  // TLS trust: verified fetch only - the platform root CA is in the OS
+  // trust store and Node runs with --use-openssl-ca (npm scripts). No
+  // code-level verification bypass, ever (platform TLS rule).
+  const deadline = Date.now() + 15_000;
+  let warmed = false;
+  // One representative route per service family - ledger's admin-ui route
+  // is the first one the admin UI drives; warming it warms the shared
+  // on-demand cert path for the rest (same org/env suffix mints fine).
+  const routes = [
+    `https://bank8-ledger.prod.${orgDomain}/v1/health`,
+  ];
+  while (Date.now() < deadline && !warmed) {
+    for (const url of routes) {
+      try {
+        const resp = await fetch(url, { signal: AbortSignal.timeout(3_000) });
+        // ANY HTTP verdict means TLS is live - the mint completed.
+        if (resp.status > 0) { warmed = true; break; }
+      } catch {
+        // Not minted yet - retry below.
       }
-      if (!warmed) await new Promise((r) => setTimeout(r, 500));
     }
-    if (warmed) logStep('[lifecycle] tenant service routes TLS-warmed');
-    else logStep('[lifecycle] ⚠️ tenant service route warmup window elapsed - first call may race the mint');
-  } finally {
-    if (prev === undefined) delete process.env.NODE_TLS_REJECT_UNAUTHORIZED;
-    else process.env.NODE_TLS_REJECT_UNAUTHORIZED = prev;
+    if (!warmed) await new Promise((r) => setTimeout(r, 500));
   }
+  if (warmed) logStep('[lifecycle] tenant service routes TLS-warmed');
+  else logStep('[lifecycle] ⚠️ tenant service route warmup window elapsed - first call may race the mint');
 }
 
 function loadMeta(): TestMeta {

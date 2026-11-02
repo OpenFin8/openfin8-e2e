@@ -357,30 +357,26 @@ export async function globalSetup(): Promise<void> {
   // - a stall fails loudly instead of hiding behind the swallow.
   const iopencaAuthUrl = `https://auth.${frank.envSlug}.${iopencaOrgDomain}`;
   {
-    const prevTls = process.env.NODE_TLS_REJECT_UNAUTHORIZED;
-    process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+    // TLS trust: verified fetch only - the platform root CA is in the OS
+    // trust store and Node runs with --use-openssl-ca (npm scripts). No
+    // code-level verification bypass, ever (platform TLS rule).
     let authReachable = false;
-    try {
-      for (let i = 0; i < 45 && !authReachable; i++) {
-        // Per-probe abort: a SYN-hung connect must not stall the poll.
-        const probe = new AbortController();
-        const timer = setTimeout(() => probe.abort(), 3_000);
-        try {
-          await fetch(iopencaAuthUrl, { method: 'GET', redirect: 'manual', signal: probe.signal });
-          authReachable = true;
-        } catch {
-          // Not routable yet (ENOTFOUND / ECONNREFUSED / TLS refused / abort) -
-          // wait and probe again.
-        } finally {
-          clearTimeout(timer);
-        }
-        if (!authReachable) {
-          await new Promise((r) => setTimeout(r, 1_000));
-        }
+    for (let i = 0; i < 45 && !authReachable; i++) {
+      // Per-probe abort: a SYN-hung connect must not stall the poll.
+      const probe = new AbortController();
+      const timer = setTimeout(() => probe.abort(), 3_000);
+      try {
+        await fetch(iopencaAuthUrl, { method: 'GET', redirect: 'manual', signal: probe.signal });
+        authReachable = true;
+      } catch {
+        // Not routable yet (ENOTFOUND / ECONNREFUSED / TLS refused / abort) -
+        // wait and probe again.
+      } finally {
+        clearTimeout(timer);
       }
-    } finally {
-      if (prevTls === undefined) delete process.env.NODE_TLS_REJECT_UNAUTHORIZED;
-      else process.env.NODE_TLS_REJECT_UNAUTHORIZED = prevTls;
+      if (!authReachable) {
+        await new Promise((r) => setTimeout(r, 1_000));
+      }
     }
     if (authReachable) {
       console.log(`  ✅ globalSetup: iOpenCA env auth reachable (${iopencaAuthUrl})`);
