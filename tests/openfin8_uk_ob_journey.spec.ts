@@ -125,18 +125,22 @@ test('the revoked consent answers 400 (never a bare 404)', async () => {
 
 test('the JWS discipline + the idempotency key on domestic payments', async () => {
   // The JWS fixture over the canonical body (the ceremony module's
-  // deterministic form: sig:<sha256 of "{iss}:{iat}:{body}>).
+  // deterministic form: sig:<sha256 of "{iss}:{iat}:{Data-document}>).
+  // The canonical body IS the adapter's unwrapped `Data` document -
+  // key order matters, so the same literal object goes into both the
+  // body and the signature.
   const iss = 'org-x/software-y';
   const iat = Math.floor(Date.now() / 1000);
-  const canonical = `${iss}:${iat}:${JSON.stringify({ ConsentId: '00000000-0000-0000-0000-000000000000' })}`;
+  const data = {
+    ConsentId: '00000000-0000-0000-0000-000000000000',
+    Initiation: { InstructedAmount: { Amount: '12.34', Currency: 'GBP' } },
+  };
+  const canonical = `${iss}:${iat}:${JSON.stringify(data)}`;
   const signature = `sig:${createHash('sha256').update(canonical).digest('hex')}`;
 
   // An unsigned initiation is rejected with the named reason.
   const unsigned = await cliCall(UK, 'POST', `${PFX}/pisp/domestic-payments`, {
-    Data: {
-      ConsentId: '00000000-0000-0000-0000-000000000000',
-      Initiation: { InstructedAmount: { Amount: '12.34', Currency: 'GBP' } },
-    },
+    Data: data,
     Risk: {},
   });
   // No x-idempotency-key + no signature: rejected (either named reason).
@@ -145,13 +149,21 @@ test('the JWS discipline + the idempotency key on domestic payments', async () =
 
   // The signed + keyed initiation passes both gates (the consent verdict
   // or the proxy state follows - never the JWS/idempotency rejection).
-  const signed = await cliCall(UK, 'POST', `${PFX}/pisp/domestic-payments`, {
-    Data: {
-      ConsentId: '00000000-0000-0000-0000-000000000000',
-      Initiation: { InstructedAmount: { Amount: '12.34', Currency: 'GBP' } },
+  // The signature rides the x-jws-signature header over the canonical
+  // form; the key rides x-idempotency-key (the CLI --header passthrough).
+  const signed = await cliCall(
+    UK,
+    'POST',
+    `${PFX}/pisp/domestic-payments`,
+    { Data: data, Risk: {} },
+    undefined,
+    {
+      'x-jws-signature': signature,
+      'x-idempotency-key': `e2e-${meta.runId}`,
+      'x-ob-iss': iss,
+      'x-ob-iat': String(iat),
     },
-    Risk: {},
-  });
+  );
   const signedText = JSON.stringify(signed.json ?? signed.stderr);
   expect(
     !signedText.includes('x-jws-signature') && !signedText.includes('idempotency'),

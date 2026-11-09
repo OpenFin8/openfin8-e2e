@@ -78,7 +78,7 @@ test('discovery advertises the honest served surface', async () => {
 test('the AIS consent + redirect-SCA ceremony reaches VALID', async () => {
   // 1. Create the AIS consent - the four-state machine starts at `received`.
   const create = await cliCall(EU, 'POST', '/v1/consents', {
-    customer_id: meta.ibankEnvId, // the PSU handle rides the caller's context
+    customerId: meta.ibankEnvId, // the PSU handle rides the caller's context
     service: 'ais',
     scopes: ['openfin8:eu:accountbasic:read'],
     expiresInDays: 90,
@@ -139,7 +139,7 @@ test('a failed SCA challenge never touches the consent state', async () => {
   // consent stays `received` (a failed challenge is retryable with a NEW
   // sub-resource - SCA success/failure is never conflated with the grant).
   const create = await cliCall(EU, 'POST', '/v1/consents', {
-    customer_id: meta.ibankEnvId,
+    customerId: meta.ibankEnvId,
     service: 'ais',
     scopes: ['openfin8:eu:accountbasic:read'],
   });
@@ -183,7 +183,7 @@ test('PIS fails closed without a QSEALC signature', async () => {
     'POST',
     '/v1/payments/sepa-credit-transfers',
     {
-      customer_id: meta.ibankEnvId,
+      customerId: meta.ibankEnvId,
       debtorAccount: 'DE89370400440532013000',
       instructedPayment: { instructedAmount: { currency: 'EUR', amount: '12.34' } },
       // no `signature` - the unsigned initiation
@@ -207,7 +207,7 @@ test('PIS fails closed without a QSEALC signature', async () => {
   const canonical = `${product}:${JSON.stringify(payment)}`;
   const signature = `sig:${createHash('sha256').update(canonical).digest('hex')}`;
   const signed = await cliCall(EU, 'POST', `/v1/payments/${product}`, {
-    customer_id: meta.ibankEnvId,
+    customerId: meta.ibankEnvId,
     debtorAccount: 'DE89370400440532013000',
     instructedPayment: payment,
     signature,

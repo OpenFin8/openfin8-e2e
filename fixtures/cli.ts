@@ -187,6 +187,7 @@ export async function cliCall(
   path: string,
   body?: unknown,
   envId?: string,
+  headers?: Record<string, string>,
 ): Promise<CliResult> {
   const args = ['call', service, method, path];
   if (body) {
@@ -194,6 +195,12 @@ export async function cliCall(
   }
   if (envId) {
     args.push(`--env=${envId}`);
+  }
+  // Caller-supplied headers (repeatable --header Name=Value): the OB
+  // protocol headers (x-jws-signature, x-idempotency-key, x-ob-iss)
+  // ride the passthrough - the CLI pins auth/env headers itself.
+  for (const [k, v] of Object.entries(headers ?? {})) {
+    args.push(`--header=${k}=${v}`);
   }
   return runCli(args);
 }
