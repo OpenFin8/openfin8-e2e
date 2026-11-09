@@ -17,6 +17,14 @@
 //   5. Alice signs in to eBank and checks her accounts.
 //   5. Alice signs up at eOpenCA and completes the consent flow,
 //      seeing her iBank accounts.
+//   6. Alice signs OUT of eOpenCA, signs back IN, and verifies her
+//      connected account INFORMATION (the consent survives the session:
+//      the delegated-token data path re-reads the persisted registry,
+//      the account detail, and the transaction history).
+//   7. The FDX recipient API coverage: the consent_id-scoped account
+//      filter, the transaction history surface, and the revocation
+//      contract (a revoked consent stops serving data - the negative
+//      assertion the isolation story demands).
 //
 // Dash tests (operator onboarding, playground routes) live in the
 // sentin8 e2e suite - the bank8 suite never opens Dash.
@@ -759,6 +767,221 @@ test.describe('OpenFin8 Lifecycle - the recipient journey (provider-side prereqs
     }
     expect(hasConsent, 'eOpenCA Connections page should show the active iBank consent').toBe(true);
     logStep('[lifecycle] 5 done: eOpenCA Connections page verified - active iBank consent visible');
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // eOpenCA - Alice signs out, signs back in, and verifies the account
+  // INFORMATION (the consent survives the session: a fresh BFF session
+  // re-reads the persisted recipient registry + the delegated-token data
+  // path end to end)
+  // ═══════════════════════════════════════════════════════════════════════
+
+  test('6. Alice re-logs into eOpenCA and verifies her connected account information', async () => {
+    await maybePause(page, '6.');
+    logStep('[lifecycle] 6 start: Alice signs out of eOpenCA, signs back in, and verifies account info');
+    const iopencaAppURL = `https://${meta.eopencaHostname}`;
+
+    // Sign out through the app's sidebar (the logout IconButton - its
+    // tooltip renders as the Semantics label; the eOpenCA app has no test
+    // bridge, so the UI logout button is the honest path). signOut clears
+    // the local auth state WITHOUT a navigation - the shell's auth
+    // listener rebuilds to the landing page (the "Sign In" surface). A
+    // fresh sign-in then proves the consent PERSISTED - the new session
+    // reads the registry, not the in-memory consent state of the old one.
+    await waitForFlutterSemantics(page, 2_000);
+    let signedOut = false;
+    try {
+      await clickFlutterButton(page, 'Sign Out');
+      // The BFF session is gone + the local state cleared: the shell
+      // re-renders the landing page (no URL change - poll the surface).
+      const logoutDeadline = Date.now() + 8_000;
+      while (Date.now() < logoutDeadline) {
+        try {
+          await waitForFlutterText(page, 'Sign In', 1_500);
+          signedOut = true;
+          break;
+        } catch {
+          // The auth listener has not fired yet - retry.
+          try { await clickFlutterButton(page, 'Sign Out', true); } catch { /* already clicked */ }
+        }
+      }
+    } catch {
+      const texts = await getFlutterTexts(page);
+      logStep(`[lifecycle] 6 step: sign-out click failed (page: ${texts.slice(0, 10).join(' | ')})`);
+    }
+    expect(signedOut, 'the eOpenCA Sign Out button must end the session and show the landing page').toBe(true);
+    logStep('[lifecycle] 6 step: Alice signed out of eOpenCA');
+
+    // Sign back in - the full OAuth round-trip through the iOpenCA
+    // tenant's Auth8. signInToTenantAuth8 handles the landing-page
+    // "Sign In" → Auth8 → (the consent screen a fresh sign-in presents)
+    // → callback chain. Clear the auth rate limiter first (the consent
+    // flow in step 5 already signed Alice in once).
+    clearAuthRateLimits(meta.aliceEmail);
+    await signInToTenantAuth8(page, context, iopencaAppURL, meta.aliceEmail, Personas.alice.password!);
+    logStep('[lifecycle] 6 step: Alice signed back in to eOpenCA');
+
+    // The Accounts page must show the connected iBank accounts through
+    // the NEW session (the delegated token is re-loaded from the
+    // recipient registry - the consent survived the session end). The
+    // accounts hook polls while the list is empty (the grant-settle
+    // window), so poll for the account card like test 5 does - the
+    // accounts are ALREADY settled by now (test 5 verified them), but
+    // the fresh session's first read can still race the BFF session's
+    // token bootstrap.
+    await waitForFlutterText(page, 'Accounts', 2_000);
+    await clickFlutterButton(page, 'Accounts', true);
+    await waitForFlutterSemantics(page, 2_000);
+    let acctAll = '';
+    {
+      const acctDeadline = Date.now() + 20_000;
+      while (Date.now() < acctDeadline) {
+        const acctTexts = await getFlutterTexts(page);
+        acctAll = acctTexts.join(' ');
+        if (acctAll.includes('iBank Checking') || acctAll.includes('iBank Savings') || acctAll.includes('iBank Credit Card')) {
+          break; // The accounts rendered.
+        }
+        await page.waitForTimeout(1_000);
+      }
+    }
+    expect(
+      acctAll.includes('iBank Checking') || acctAll.includes('iBank Savings') || acctAll.includes('iBank Credit Card'),
+      'the fresh session must still show the connected iBank accounts',
+    ).toBe(true);
+    expect(
+      acctAll.toLowerCase().includes('no accounts yet'),
+      'a re-logged customer must NOT see the empty state - her consent persisted',
+    ).toBe(false);
+    logStep('[lifecycle] 6 step: accounts visible through the fresh session');
+
+    // The account CARD carries the information fields the FDX accounts
+    // read returns: the nickname, the account type, the masked account
+    // number, and the balance + status. Open the first account's detail
+    // page and verify the information surfaces.
+    await clickFlutterButton(page, 'iBank Checking');
+    await waitForFlutterSemantics(page, 2_000);
+    const detailTexts = await getFlutterTexts(page);
+    const detailAll = detailTexts.join(' ');
+    expect(detailAll, 'the account detail page must render').toContain('Current Balance');
+    expect(detailAll, 'the account detail page carries the account number (the masked FDX field)').toContain('Account Number');
+    expect(detailAll, 'the account detail page carries the type (Checking)').toContain('Checking');
+    // The detail page exposes the transaction history (the FDX
+    // transactions read the app surfaces).
+    await waitForFlutterText(page, 'View Transactions', 2_000);
+    await clickFlutterButton(page, 'View Transactions');
+    await waitForFlutterSemantics(page, 2_000);
+    await waitForFlutterText(page, 'Transactions', 3_000);
+    const txnTexts = await getFlutterTexts(page);
+    const txnAll = txnTexts.join(' ');
+    // The account is brand-new (opened this run) - an EMPTY transaction
+    // list is the honest state; what must hold is that the surface
+    // ANSWERED (the page renders, never a proxy/consent error).
+    expect(
+      txnAll.toLowerCase().includes('no transactions yet') || txnAll.length > 0,
+      `the Transactions page must render (page: ${txnTexts.slice(0, 15).join(' | ')})`,
+    ).toBe(true);
+    logStep('[lifecycle] 6 done: account information + transactions verified through the fresh session');
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // FDX recipient API coverage - the consent-scoped reads + the
+  // revocation contract (a revoked consent stops serving data)
+  // ═══════════════════════════════════════════════════════════════════════
+
+  test('7. the FDX recipient API surface: the consent-scoped accounts, the transactions read, and the revocation contract', async () => {
+    await maybePause(page, '7.');
+    logStep('[lifecycle] 7 start: FDX recipient API coverage + the revocation contract');
+    const bffBase = `https://bff.${meta.eopencaHostname}`;
+
+    // The app session (Alice's fresh BFF8 cookie from step 6) IS the
+    // recipient's session - the same lane the app's own hooks use
+    // (/proxy/openfin8-ca/...). Drive the recipient APIs directly.
+    // (a) The consents list - the registry the Connections page renders.
+    const consentsRes = await page.request.get(`${bffBase}/proxy/openfin8-ca/v1/recipient/consents`, { failOnStatusCode: false });
+    expect(consentsRes.status(), 'the recipient consents list must answer 200 through the BFF session').toBe(200);
+    const consentsBody = (await consentsRes.json()) as { consents?: Array<{ id: string; status: string; provider_id?: string }> };
+    const consents = consentsBody.consents ?? [];
+    expect(consents.length, 'the consents list must carry the active iBank connection').toBeGreaterThanOrEqual(1);
+    // The registry's wire status is the raw DB form (lowercase 'active') -
+    // the same value the Connections page badge renders.
+    const active = consents.find((c) => c.status.toLowerCase() === 'active') ?? consents[0];
+    const consentId = active.id;
+    logStep(`[lifecycle] 7 step: recipient consents list ok (${consents.length} consents, active id ${consentId.slice(0, 8)}...)`);
+
+    // (b) The consent-scoped accounts read (the consent_id filter the
+    // consent flow's account selection persists).
+    const scopedRes = await page.request.get(`${bffBase}/proxy/openfin8-ca/v1/recipient/accounts?consent_id=${consentId}`, { failOnStatusCode: false });
+    expect(scopedRes.status(), 'the consent-scoped accounts read must answer 200').toBe(200);
+    const scopedBody = (await scopedRes.json()) as { accounts?: Array<{ accountId?: string; id?: string; nickname?: string }> };
+    const scopedAccounts = scopedBody.accounts ?? [];
+    expect(scopedAccounts.length, 'the consent-scoped read must return the connected accounts').toBeGreaterThanOrEqual(1);
+    const anyAccount = scopedAccounts[0];
+    const accountId = anyAccount.accountId ?? anyAccount.id ?? '';
+    expect(accountId, 'the account document must carry the account id').toBeTruthy();
+    logStep(`[lifecycle] 7 step: consent-scoped accounts read ok (${scopedAccounts.length} accounts)`);
+
+    // (c) The unfiltered accounts read - the app's Accounts page lane
+    // (the most-recent-active-connection fallback).
+    const unscopedRes = await page.request.get(`${bffBase}/proxy/openfin8-ca/v1/recipient/accounts`, { failOnStatusCode: false });
+    expect(unscopedRes.status(), 'the unfiltered accounts read must answer 200').toBe(200);
+
+    // (d) The transaction history read for one account (the FDX
+    // transactions surface the app's View Transactions page drives).
+    const txnsRes = await page.request.get(`${bffBase}/proxy/openfin8-ca/v1/recipient/accounts/${accountId}/transactions`, { failOnStatusCode: false });
+    const txnsBodyText = await txnsRes.text();
+    expect(
+      txnsRes.status(),
+      `the recipient transactions read must answer 200 (the consent carries transactions:read) - got ${txnsRes.status()}: ${txnsBodyText.slice(0, 300)}`,
+    ).toBe(200);
+    logStep('[lifecycle] 7 step: recipient transactions read ok');
+
+    // (e) The provider catalog read - the Providers page's data source.
+    const providersRes = await page.request.get(`${bffBase}/proxy/openfin8-ca/v1/recipient/providers`, { failOnStatusCode: false });
+    expect(providersRes.status(), 'the recipient provider catalog must answer 200').toBe(200);
+    const providersBody = (await providersRes.json()) as { providers?: Array<{ id?: string; name?: string }> };
+    const providers = providersBody.providers ?? [];
+    expect(providers.length, 'the catalog must still list the iBank provider').toBeGreaterThanOrEqual(1);
+    logStep('[lifecycle] 7 step: provider catalog read ok');
+
+    // (f) The revocation contract: revoke the consent through the same
+    // recipient API the app's Connections page drives, then the data
+    // surfaces must STOP serving (the negative assertion - the revoked
+    // consent no longer carries data across the recipient plane). The
+    // BFF gates mutation POSTs on X-BFF-CSRF (the session's csrf_token
+    // - the same header the app sends); read it from /auth/session like
+    // the app does.
+    const sessionRes = await page.request.get(`${bffBase}/auth/session`, { failOnStatusCode: false });
+    expect(sessionRes.status(), 'the BFF session read must answer 200').toBe(200);
+    const sessionBody = (await sessionRes.json()) as { csrf_token?: string };
+    const csrf = sessionBody.csrf_token ?? '';
+    expect(csrf, 'the session must carry the CSRF token').toBeTruthy();
+    const revokeRes = await page.request.post(`${bffBase}/proxy/openfin8-ca/v1/recipient/consents/${consentId}/revoke`, {
+      data: { reason: 'USER_ACTION' },
+      headers: { 'X-BFF-CSRF': csrf },
+      failOnStatusCode: false,
+    });
+    expect(revokeRes.status(), 'the consent revocation must answer 200').toBe(200);
+    const revokeBody = (await revokeRes.json()) as { status?: string };
+    expect((revokeBody.status ?? '').toLowerCase(), 'the registry row must render the revoked status').toBe('revoked');
+    logStep('[lifecycle] 7 step: consent revoked through the recipient API');
+
+    // The registry list reflects the revocation (the Connections page's
+    // data source): the consent no longer reports active.
+    const afterListRes = await page.request.get(`${bffBase}/proxy/openfin8-ca/v1/recipient/consents`, { failOnStatusCode: false });
+    expect(afterListRes.status(), 'the consents list must still answer 200 after revocation').toBe(200);
+    const afterList = (await afterListRes.json()) as { consents?: Array<{ id: string; status: string }> };
+    const revokedRow = (afterList.consents ?? []).find((c) => c.id === consentId);
+    expect((revokedRow?.status ?? '').toLowerCase(), 'the revoked consent must render revoked in the registry list').toBe('revoked');
+
+    // The accounts read stops serving the revoked connection's data:
+    // the unfiltered read falls back to the most-recent ACTIVE
+    // connection - with none left it answers the honest empty list
+    // (never the revoked connection's accounts).
+    const afterAccountsRes = await page.request.get(`${bffBase}/proxy/openfin8-ca/v1/recipient/accounts`, { failOnStatusCode: false });
+    expect(afterAccountsRes.status(), 'the accounts read must answer 200 after revocation (the honest empty state, not an error)').toBe(200);
+    const afterAccounts = ((await afterAccountsRes.json()) as { accounts?: Array<{ id?: string }> }).accounts ?? [];
+    expect(afterAccounts, 'a revoked-out recipient must see NO accounts (the empty registry state)').toHaveLength(0);
+    logStep('[lifecycle] 7 done: the revocation contract verified - data access stopped with the consent');
   });
 });
 

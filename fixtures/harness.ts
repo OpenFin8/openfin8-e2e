@@ -386,6 +386,43 @@ export async function signInToTenantAuth8(
   await page.waitForTimeout(500);
   // Use the same signInOnAuth8 helper that signUpViaApp uses.
   await signInOnAuth8(page, email, password);
+  // The OAuth round-trip after the credential step:
+  //   /sign-in → /oauth/authorize → [consent?] → BFF8 /auth/callback → app.
+  // Some clients present the AUTHORIZE (consent) screen on every fresh
+  // sign-in (eOpenCA's recipient client - the sign-up path auto-approves
+  // once; a RE-LOGIN presents it again). Drive the Authorize button when
+  // it appears, then let the callback chain finish (the signUpViaApp
+  // precedent's authorize-click strategy).
+  const consentDeadline = Date.now() + 10_000;
+  let consentHandled = false;
+  while (Date.now() < consentDeadline) {
+    const url = page.url();
+    if (!url.includes('/sign-in') && !url.includes('/oauth/') && !url.includes('/auth/callback') && !url.includes('auth.')) {
+      consentHandled = true; // Back at the app - the chain completed.
+      break;
+    }
+    if (url.includes('/oauth/') || url.includes('authorize') || url.includes('/consent')) {
+      await waitForFlutterSemantics(page, 2_000);
+      try {
+        const btn = page.getByRole('button', { name: 'Authorize', exact: true });
+        if (await btn.count() > 0) {
+          await btn.first().click({ force: true });
+        } else {
+          await clickFlutterButton(page, 'Authorize');
+        }
+      } catch {
+        // The consent page may still be booting - retry at the loop head.
+      }
+      await page.waitForTimeout(1_000);
+      continue;
+    }
+    await page.waitForTimeout(500);
+  }
+  if (!consentHandled) {
+    // The consent branch may have completed the chain inside its own
+    // wait - one final settle poll (the app boots its semantics).
+    await page.waitForTimeout(1_000);
+  }
   // Wait for the OAuth callback redirect chain to complete.
   // auth8 /sign-in → /oauth/authorize → BFF8 /auth/callback → app URL.
   // The BFF8 callback creates the bff8-session cookie and redirects the
