@@ -115,7 +115,10 @@ export async function globalSetup(): Promise<void> {
   // reporting/risk/compliance are the regulatory suite - enabling them
   // seeds jurisdiction obligations + policy templates through each
   // service's env-init consumer (bank8:reporting:envinit etc.).
-  for (const svc of ['ledger', 'payments', 'fdx', 'reporting', 'risk', 'compliance', 'openfin8-eu', 'openfin8-uk']) {
+  // openfin8-ca/openfin8-us are the RUN-TIME service flags (the profile
+  // stream_family); the pre-rename `fdx` name matches nothing (the ca
+  // consumer matches service == "openfin8-ca" and never seeds).
+  for (const svc of ['ledger', 'payments', 'openfin8-ca', 'openfin8-us', 'reporting', 'risk', 'compliance', 'openfin8-eu', 'openfin8-uk']) {
     assertCliOk(
       await cliCall('sys', 'PUT', `/v1/env/${ibankEnvId}/services`, { service: svc, enabled: true, config: {} }),
       `globalSetup: enable ${svc} on iBank prod env`,
@@ -297,15 +300,21 @@ export async function globalSetup(): Promise<void> {
   // `app:` form; the legacy org-scoped `org:admins` group is gone -
   // env-scoped admin authorization rides the sys-seeded `sentin8:env:admins`.
   await ensureGroupMember('sentin8:env:admins', (benUser.json as { id: string }).id, 'Ben → sentin8:env:admins');
-  // Ben/Bob → the INSTANCE groups provisioned by app setup
-  // (`sentin8:app:{instance_id}`, staff auth env). The F-A strict gate
-  // checks THESE names, and their setup-attached role carries the
-  // listing's scopes - the live `principal.scopes` the vertical
-  // scope-mirror policies evaluate against. The legacy snake_case groups
-  // (`sentin8:app:bank8_admin`) grant nothing (AUTH-3 retired them).
-  // OBVERT-3: the Admin/Teller instance groups are bank8-e2e flows -
-  // not installed here. Ben keeps sentin8:env:admins (platform-seeded),
-  // which is enough for the provider-side CLI reads this suite needs.
+  // Ben → the admin app's INSTANCE group (`sentin8:app:{instance_id}`,
+  // staff auth env). The F-A strict gate (BFF design §4.3a) requires
+  // membership of the setup-provisioned instance group in the token's
+  // auth env - org admin roles alone do not grant an admin-app session
+  // ("not a member of this app"). Step 1 of this suite drives Ben
+  // through the same Bank8:Admin UI the bank8 lifecycle does, so the
+  // membership is required HERE too (the former comment claiming the
+  // instance groups were bank8-e2e-only was wrong - the gate is
+  // instance-scoped, not suite-scoped).
+  const adminInstanceGroup = instanceIds.get('bank8-admin');
+  if (adminInstanceGroup) {
+    await ensureGroupMember(`sentin8:app:${adminInstanceGroup}`, (benUser.json as { id: string }).id, 'Ben → sentin8:app:{admin instance}');
+  } else {
+    await ensureGroupMember('sentin8:app:bank8_admin', (benUser.json as { id: string }).id, 'Ben → sentin8:app:bank8_admin (legacy fallback)');
+  }
 
   // ── 6. iOpenCA org + prod env + eOpenCA instance ──────────────────
   await runCli([
@@ -392,6 +401,17 @@ export async function globalSetup(): Promise<void> {
     'globalSetup: install eOpenCA',
   );
   const eopencaHostname = `openfin8-eopenca.${frank.envSlug}.${iopencaOrgDomain}`;
+
+  // Enable the recipient service on the IOPENCA env (the recipient org
+  // genuinely runs the openfin8:ca recipient engine for its customers:
+  // consents/start derives the OAuth callback host from THIS env's
+  // identity via Sys's scoped tenant snapshot - which 404s while the
+  // service is not enabled in the org, and every consent start failed
+  // with 'recipient callback host could not be derived').
+  assertCliOk(
+    await cliCallSettled('sys', 'PUT', `/v1/env/${iopencaEnvId}/services`, { service: 'openfin8-ca', enabled: true, config: {} }),
+    'globalSetup: enable openfin8-ca on iOpenCA prod env (recipient side)',
+  );
 
   // ── Write meta for test files ───────────────────────────────────────
   const meta = {

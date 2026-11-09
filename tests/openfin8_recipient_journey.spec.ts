@@ -82,10 +82,13 @@ async function warmTenantServiceRoutes(meta: TestMeta, orgDomain: string): Promi
   const deadline = Date.now() + 15_000;
   let warmed = false;
   // One representative route per service family - ledger's admin-ui route
-  // is the first one the admin UI drives; warming it warms the shared
-  // on-demand cert path for the rest (same org/env suffix mints fine).
+  // is the first one the admin UI drives; the openfin8-ca tenant host is
+  // what the eOpenCA BFF proxy forwards to (the recipient catalog,
+  // consents, accounts). Warming each warms the shared on-demand cert
+  // path for the rest (same org/env suffix mints fine).
   const routes = [
     `https://bank8-ledger.prod.${orgDomain}/v1/health`,
+    `https://openfin8-ca.prod.${orgDomain}/v1/health`,
   ];
   while (Date.now() < deadline && !warmed) {
     for (const url of routes) {
@@ -178,6 +181,30 @@ test.describe('OpenFin8 Lifecycle - the recipient journey (provider-side prereqs
     logStep(`[lifecycle] 1 step: navigating to Bank8:Admin at ${adminURL}`);
 
     await gotoCertWarm(page, adminURL);
+    // Cold-boot budget: a new run's first load races the on-demand TLS cert
+    // mint for the app + BFF + staff-auth hostnames and the first
+    // /auth/session call (observed 3.7s on the BFF alone; the engine boot
+    // + semantics render arrives ~10-15s after goto on a truly cold run).
+    // waitForFlutterSemantics returns as soon as ANY flt-semantics exists,
+    // but the login screen may not be rendered yet - so poll for the
+    // actual STATE text ("Staff Sign In" OR the signed-in dashboard's
+    // "Overview") before branching. Up to 30s. (Mirrors the bank8 spec's
+    // step-1 boot poll - the same race killed this suite's first step.)
+    const bootDeadline = Date.now() + 30_000;
+    let booted = false;
+    while (Date.now() < bootDeadline) {
+      const texts = await getFlutterTexts(page);
+      if (texts.some((t) => t.includes('Staff Sign In') || t.includes('Overview') || t.includes('Ledger'))) {
+        booted = true;
+        break;
+      }
+      await page.waitForTimeout(500);
+    }
+    if (!booted) {
+      throw new Error(`Bank8:Admin did not finish booting within 30s (no "Staff Sign In" or dashboard text)`);
+    }
+    await page.waitForTimeout(500);
+
     await waitForFlutterSemantics(page, 2_000);
     await page.waitForTimeout(500);
 
@@ -598,8 +625,41 @@ test.describe('OpenFin8 Lifecycle - the recipient journey (provider-side prereqs
     // The detail page opens via Navigator.push - give the Flutter route
     // transition time to paint before asserting on the button text.
     await waitForFlutterText(page, 'Connect & Authorize', 4_000);
-    await clickFlutterButton(page, 'Connect & Authorize');
-    logStep('[lifecycle] 5 step: clicked Connect & Authorize, waiting for redirect');
+    // Shield fail-closed first-hit race: the very first consent-start
+    // request on a fresh env can land inside the no_set_for_env window -
+    // the policy-set self-heal seeds on that same request, so the SECOND
+    // attempt succeeds. The app surfaces the 500 as a snackbar and stays
+    // on the page, so RETRY THE CLICK while the page has not redirected
+    // (bounded - a genuine non-transient failure exhausts the window and
+    // the deadline error below reports the URL).
+    const consentClickDeadline = Date.now() + 15_000;
+    let consentClicked = false;
+    while (Date.now() < consentClickDeadline) {
+      // The click can throw MID-NAVIGATION (the previous click's consent
+      // start succeeded and the page is already leaving) - a click error
+      // is therefore NOT a failure signal; check the URL first.
+      if (!page.url().includes(meta.eopencaHostname)) { consentClicked = true; break; }
+      try {
+        await clickFlutterButton(page, 'Connect & Authorize');
+        logStep('[lifecycle] 5 step: clicked Connect & Authorize, waiting for redirect');
+      } catch {
+        // The page may have moved between the check and the click - the
+        // URL check at the loop head resolves it next iteration.
+      }
+      // Give the PAR/authorize chain a moment to move the page.
+      const moved = await Promise.race([
+        page.waitForURL((u) => !u.toString().includes(meta.eopencaHostname), { timeout: 4_000 })
+          .then(() => true)
+          .catch(() => false),
+      ]);
+      if (moved) { consentClicked = true; break; }
+      // Still on the detail page - the start may have failed (snackbar);
+      // wait out the snackbar and re-click.
+      await page.waitForTimeout(1_000);
+    }
+    if (!consentClicked) {
+      logStep('[lifecycle] 5 step: consent start never redirected after 15s of retries');
+    }
 
     // Wait for redirect to iBank's Sentin8:Auth sign-in page.
     // FAIL FAST: report the current URL when the deadline expires.
@@ -660,7 +720,10 @@ test.describe('OpenFin8 Lifecycle - the recipient journey (provider-side prereqs
 
     let hasAccounts = false;
     try {
-      await waitForFlutterText(page, 'Checking', 5_000);
+      // The provider seeds the consent grant asynchronously from the AS's
+      // grant event (~6-8s settle ride) and the app's accounts hook polls
+      // through that window - give the poll room to land (20s).
+      await waitForFlutterText(page, 'Checking', 20_000);
       hasAccounts = true;
     } catch {
       const texts = await getFlutterTexts(page);
