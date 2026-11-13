@@ -1,6 +1,6 @@
 {
   "name": "openfin8-e2e",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "private": true,
   "description": "OpenFin8 vertical end-to-end test suites (TypeScript + official Playwright) - the recipient journey.",
   "type": "module",
