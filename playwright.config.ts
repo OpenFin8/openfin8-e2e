@@ -3,16 +3,18 @@
 // SPDX-FileCopyrightText: Copyright Contributors to the OpenFin8:E2E
 // SPDX-License-Identifier: Apache-2.0
 
-// ── bank8 e2e - Playwright TypeScript configuration ──────────────────────
+// ── openfin8 e2e - Playwright TypeScript configuration ───────────────────
 //
 // Platform setup happens ONCE in tests/global-setup.ts via the sentin8-cli
 // binary (org/env/features/app instances/staff users) - no Dash-driven
-// platform setup. UI tests drive ONLY the four bank8 apps (admin, ebank,
-// eopenca, eteller). Dash coverage lives in the sentin8 e2e suite.
+// platform setup. UI tests drive the bank8 provider-side prerequisite apps
+// (admin, ebank) and the eOpenCA recipient app. Dash coverage lives in the
+// sentin8 e2e suite.
 //
-// Suites:
-//   bank8_lifecycle - serial UI lifecycle across the 4 bank8 apps
-//   protocol/       - HTTP-only tenant auth / resolution / token-exchange
+// Suite:
+//   openfin8_recipient_journey - serial lifecycle: the provider-side
+//   prerequisites via bank8, then the Canada (FDX) recipient journey
+//   through eOpenCA.
 
 import { defineConfig, devices } from '@playwright/test';
 import { platformDomain } from './fixtures/env.js';

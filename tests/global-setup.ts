@@ -115,10 +115,12 @@ export async function globalSetup(): Promise<void> {
   // reporting/risk/compliance are the regulatory suite - enabling them
   // seeds jurisdiction obligations + policy templates through each
   // service's env-init consumer (bank8:reporting:envinit etc.).
-  // openfin8-ca/openfin8-us are the RUN-TIME service flags (the profile
-  // stream_family); the pre-rename `fdx` name matches nothing (the ca
-  // consumer matches service == "openfin8-ca" and never seeds).
-  for (const svc of ['ledger', 'payments', 'openfin8-ca', 'openfin8-us', 'reporting', 'risk', 'compliance', 'openfin8-eu', 'openfin8-uk']) {
+  // openfin8-ca is the RUN-TIME service flag (the profile stream_family);
+  // the pre-rename `fdx` name matches nothing (the ca consumer matches
+  // service == "openfin8-ca" and never seeds). This suite tests the
+  // Canada (FDX recipient) journey only - the other openfin8 adapters
+  // (us/uk/eu) are not exercised here.
+  for (const svc of ['ledger', 'payments', 'openfin8-ca', 'reporting', 'risk', 'compliance']) {
     assertCliOk(
       await cliCall('sys', 'PUT', `/v1/env/${ibankEnvId}/services`, { service: svc, enabled: true, config: {} }),
       `globalSetup: enable ${svc} on iBank prod env`,
@@ -154,51 +156,56 @@ export async function globalSetup(): Promise<void> {
     console.log(`  ⚠️ globalSetup: FDX provider profile NOT observed - test 6 may fail`);
   }
 
-  // Wait for the XS2A adapter to serve its discovery surface (the
-  // enabled service boots + registers its schema via env-init; the poll
-  // is a bounded OBSERVATION - a stall warns, the EU spec fails loudly
-  // on a genuinely-unserved adapter).
-  let euServing = false;
-  for (let i = 0; i < 45 && !euServing; i++) {
-    try {
-      // NOTE: the dash form (`openfin8-eu`) - the CLI's `call` resolver
-      // derives `{name}.ops.sys.{domain}` and only the dash form matches
-      // the enrolled subdomain.
-      const resp = await cliCall('openfin8-eu', 'GET', '/v1/discovery');
-      if ((resp.json as { ofVersion?: string })?.ofVersion) euServing = true;
-    } catch { /* the adapter may still be booting - retry */ }
-    if (!euServing) {
-      await new Promise((r) => setTimeout(r, 1_000));
+  // HOST-REACHABILITY BARRIER (the on-demand TLS mint race - every
+  // first-touch hostname in this suite). Each env-scoped hostname's TLS
+  // certificate is minted ON-DEMAND at first handshake (~100ms when the
+  // Acme path is warm; a failed fetch arms a 30s negative-cache backoff
+  // and the FIRST handshake can hold up to 45s waiting for the mint).
+  // The BFF's /auth/login fetches the staff Auth's discovery document
+  // (https://auth.staff.{org}/.well-known/openid-configuration); when the
+  // cert is not yet minted the proxy RESETS the connection and the BFF
+  // 500s ("discovery fetch failed") - the browser renders a dead error
+  // screen and the UI step fails. The same race kills a cold APP host:
+  // the first browser goto eats its whole navigation timeout inside the
+  // mint hold, and the immediate retries land inside the mint backoff
+  // (ERR_SSL_PROTOCOL_ERROR). Warm EVERY first-touch hostname here -
+  // the staff Auth (Ben's Bank8:Admin sign-in), the prod customer Auth
+  // (Alice's eBank sign-up), each APP host, and each BFF host (the app's
+  // in-page session fetch) - BEFORE the tests run: the first probe
+  // triggers the mint and the poll (any HTTP verdict counts; only
+  // connect/TLS refusal means "not yet") returns once the host serves.
+  // The 45 x 1s budget covers even the failed-mint + 30s-backoff +
+  // re-mint worst case; a stall warns loudly instead of hiding behind
+  // the swallow.
+  const ibankStaffAuthUrl = `https://auth.staff.${ibankOrgDomain}`;
+  const ibankProdAuthUrl = `https://auth.${bill.envSlug}.${ibankOrgDomain}`;
+  /** Poll a URL until it answers with ANY HTTP verdict (mint done). */
+  async function awaitHostReachable(url: string, label: string): Promise<void> {
+    // TLS trust: verified fetch only - the platform root CA is in the OS
+    // trust store and Node runs with --use-openssl-ca (npm scripts). No
+    // code-level verification bypass, ever (platform TLS rule).
+    let reachable = false;
+    for (let i = 0; i < 45 && !reachable; i++) {
+      // Per-probe abort: a SYN-hung connect must not stall the poll.
+      const probe = new AbortController();
+      const timer = setTimeout(() => probe.abort(), 3_000);
+      try {
+        await fetch(url, { method: 'GET', redirect: 'manual', signal: probe.signal });
+        reachable = true;
+      } catch {
+        // Not routable yet (ENOTFOUND / ECONNREFUSED / TLS refused / abort) -
+        // wait and probe again.
+      } finally {
+        clearTimeout(timer);
+      }
+      if (!reachable) {
+        await new Promise((r) => setTimeout(r, 1_000));
+      }
     }
+    console.log(`  ${reachable ? '✅' : '⚠️'} globalSetup: ${label} ${reachable ? 'reachable' : 'NOT observed'} (${url})`);
   }
-  if (euServing) {
-    console.log('  ✅ globalSetup: openfin8-eu serving its discovery surface');
-  } else {
-    console.log('  ⚠️ globalSetup: openfin8-eu NOT observed serving - the EU journey spec may fail');
-  }
-
-  // Wait for the UK adapter to serve its OB consent surface (the
-  // bounded observation, the rule).
-  let ukServing = false;
-  for (let i = 0; i < 45 && !ukServing; i++) {
-    try {
-      // NOTE: the dash form (`openfin8-uk`) - the CLI's `call` resolver
-      // derives `{name}.ops.sys.{domain}`; only the dash form matches
-      // the enrolled subdomain.
-      // The OB prefix carries the served version: the consent staging
-      // route (a 400-on-auth-miss still proves the surface serves).
-      await cliCall('openfin8-uk', 'GET', '/open-banking/v3.1/aisp/account-access-consents/00000000-0000-0000-0000-000000000000');
-      ukServing = true; // any response (even a 400) proves the route serves
-    } catch { /* the adapter may still be booting - retry */ }
-    if (!ukServing) {
-      await new Promise((r) => setTimeout(r, 1_000));
-    }
-  }
-  if (ukServing) {
-    console.log('  ✅ globalSetup: openfin8-uk serving its OB surface');
-  } else {
-    console.log('  ⚠️ globalSetup: openfin8-uk NOT observed serving - the UK journey spec may fail');
-  }
+  await awaitHostReachable(ibankStaffAuthUrl, 'iBank staff auth');
+  await awaitHostReachable(ibankProdAuthUrl, 'iBank prod auth');
 
   // ── 4. Install app instances from store listings ────────────────────
   const listings = await cliCall('app', 'GET', '/v1/app/store/listings');
@@ -247,12 +254,23 @@ export async function globalSetup(): Promise<void> {
     return `${slug}.${bill.envSlug}.${ibankOrgDomain}`;
   }
 
-  const staffAuthUrl = `https://auth.staff.${ibankOrgDomain}`;
+  // The staff auth URL is already warmed (the awaitHostReachable barrier
+  // above) - the admin app's DCR and Ben's sign-in never race the mint.
   const ebankHostname = await installApp('bank8-ebank', ibankEnvId, 'eBank');
   // OBVERT-3: openfin8-e2e drives the RECIPIENT journey. eBank + Admin
   // stay (Alice's accounts and the products prerequisite on the provider
   // side); eTeller is a bank8-app flow - it lives in bank8-e2e.
-  const adminAppHostname = await installApp('bank8-admin', ibankEnvId, 'Bank8 Admin', staffAuthUrl);
+  const adminAppHostname = await installApp('bank8-admin', ibankEnvId, 'Bank8 Admin', ibankStaffAuthUrl);
+
+  // Warm the iBank app hosts + their BFF hosts (the same on-demand mint
+  // race the auth hosts ride through above): the browser's FIRST goto to
+  // each app host would otherwise eat its navigation timeout inside the
+  // mint hold, and the app's in-page session fetch to its BFF host hits
+  // the identical first-touch race.
+  await awaitHostReachable(`https://${ebankHostname}/`, 'iBank eBank app');
+  await awaitHostReachable(`https://bff.${ebankHostname}/`, 'iBank eBank BFF');
+  await awaitHostReachable(`https://${adminAppHostname}/`, 'iBank Admin app');
+  await awaitHostReachable(`https://bff.${adminAppHostname}/`, 'iBank Admin BFF');
 
   // ── 5. Staff users (Ben org-admin, Bob teller) ──────────────────────
   // Staff users live in the org-scoped (staff) Auth env. Created via the
@@ -359,40 +377,14 @@ export async function globalSetup(): Promise<void> {
   // active in this env → PAR 401 "invalid client").
   // eBank never hit this because ~49 s elapse (FDX provider poll) before
   // its install; eOpenCA is installed ~1 ms after the env is created so
-  // it raced the env-auth provisioning every run. Poll the env auth
-  // until it answers (any HTTP verdict counts - TLS/404/405 mean the
-  // route is live; only connect/TLS-refusal means "not yet"), then
-  // install. Bounded observation (max 45 s) like the FDX provider poll
-  // - a stall fails loudly instead of hiding behind the swallow.
+  // it raced the env-auth provisioning every run. The shared
+  // awaitHostReachable poll (the same barrier the iBank hosts warm
+  // through, above) waits the env auth out before the install - any
+  // HTTP verdict counts (TLS/404/405 mean the route is live; only
+  // connect/TLS-refusal means "not yet"). Bounded observation (max 45 s)
+  // - a stall warns loudly instead of hiding behind the swallow.
   const iopencaAuthUrl = `https://auth.${frank.envSlug}.${iopencaOrgDomain}`;
-  {
-    // TLS trust: verified fetch only - the platform root CA is in the OS
-    // trust store and Node runs with --use-openssl-ca (npm scripts). No
-    // code-level verification bypass, ever (platform TLS rule).
-    let authReachable = false;
-    for (let i = 0; i < 45 && !authReachable; i++) {
-      // Per-probe abort: a SYN-hung connect must not stall the poll.
-      const probe = new AbortController();
-      const timer = setTimeout(() => probe.abort(), 3_000);
-      try {
-        await fetch(iopencaAuthUrl, { method: 'GET', redirect: 'manual', signal: probe.signal });
-        authReachable = true;
-      } catch {
-        // Not routable yet (ENOTFOUND / ECONNREFUSED / TLS refused / abort) -
-        // wait and probe again.
-      } finally {
-        clearTimeout(timer);
-      }
-      if (!authReachable) {
-        await new Promise((r) => setTimeout(r, 1_000));
-      }
-    }
-    if (authReachable) {
-      console.log(`  ✅ globalSetup: iOpenCA env auth reachable (${iopencaAuthUrl})`);
-    } else {
-      console.log(`  ⚠️ globalSetup: iOpenCA env auth NOT observed - eOpenCA DCR may fail`);
-    }
-  }
+  await awaitHostReachable(iopencaAuthUrl, 'iOpenCA env auth');
 
   // OBVERT-3: the app's store listing is `eopenca` (the renamed
   // eFintech app - its app_slug follows the package).
@@ -401,6 +393,12 @@ export async function globalSetup(): Promise<void> {
     'globalSetup: install eOpenCA',
   );
   const eopencaHostname = `openfin8-eopenca.${frank.envSlug}.${iopencaOrgDomain}`;
+
+  // Warm the eOpenCA app + BFF hosts (the same first-touch mint race -
+  // the coldest boots in the journey: a FRESH instance of the app, whose
+  // hostnames nobody has touched yet).
+  await awaitHostReachable(`https://${eopencaHostname}/`, 'eOpenCA app');
+  await awaitHostReachable(`https://bff.${eopencaHostname}/`, 'eOpenCA BFF');
 
   // Enable the recipient service on the IOPENCA env (the recipient org
   // genuinely runs the openfin8:ca recipient engine for its customers:

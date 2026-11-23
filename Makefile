@@ -26,7 +26,7 @@ ifneq ($(CLI_BIN),)
 CLI_EXPORT := SENTIN8_CLI_BIN="$(CLI_BIN)"
 endif
 
-.PHONY: help install lint test test-lifecycle test-protocol report clean
+.PHONY: help install lint test report clean
 
 help: ## Show this help
 	@echo "openfin8-e2e (Playwright e2e)"
@@ -39,14 +39,8 @@ install: ## pnpm install (frozen lockfile) + Chromium download
 lint: ## tsc --noEmit type check
 	@pnpm run lint
 
-test: ## UI lifecycle suite, headed, failfast (server up first — make start in bank8-ebank)
+test: ## The Canada recipient journey, headed, failfast (server up first — make start at the tree root)
 	@$(CLI_EXPORT) pnpm run test
-
-test-lifecycle: ## Lifecycle spec only
-	@$(CLI_EXPORT) pnpm run test:lifecycle
-
-test-protocol: ## HTTP-only protocol suites (4/6/8)
-	@$(CLI_EXPORT) pnpm run test:protocol
 
 report: ## Open the Playwright HTML report
 	@pnpm exec playwright show-report
