@@ -249,8 +249,8 @@ export async function globalSetup(): Promise<void> {
     const body2 = authMode.json as { application_id?: string };
     instanceIds.set(slug, body2.application_id ?? '');
     // Default hostname: {app_slug}.{env_slug}.{org.domain} - org.domain is
-    // the platform-assigned domain ({slug}.{SENTIN8_DOMAIN}), NOT the
-    // persona's .local string.
+    // the platform-assigned domain ({slug}.{SENTIN8_DOMAIN}), the same
+    // value `sys org create` persisted for this org.
     return `${slug}.${bill.envSlug}.${ibankOrgDomain}`;
   }
 
